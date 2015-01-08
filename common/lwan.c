@@ -403,7 +403,7 @@ allocate_connections(lwan_t *l, size_t max_open_files)
         lwan_status_critical_perror("calloc");
 }
 
-static short
+short
 get_number_of_cpus(void)
 {
     long n_online_cpus = sysconf(_SC_NPROCESSORS_ONLN);
@@ -416,6 +416,12 @@ get_number_of_cpus(void)
 
 void
 lwan_init(lwan_t *l)
+{
+    lwan_init_wc(l, get_number_of_cpus());
+}
+
+void
+lwan_init_wc(lwan_t *l, short worker_count)
 {
     /* Load defaults */
     memset(l, 0, sizeof(*l));
@@ -444,7 +450,7 @@ lwan_init(lwan_t *l)
     /* Continue initialization as normal. */
     lwan_status_debug("Initializing lwan web server");
 
-    l->thread.count = get_number_of_cpus();
+    l->thread.count = worker_count;
     if (l->thread.count == 1)
         l->thread.count = 2;
 
