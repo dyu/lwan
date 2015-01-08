@@ -29,6 +29,8 @@
 
 #include "lwan.h"
 
+extern void nim_setup_foreign_thread_gc(void);
+
 struct death_queue_t {
     lwan_connection_t *conns;
     lwan_connection_t head;
@@ -286,6 +288,8 @@ thread_io_loop(void *data)
     const int max_events = min((int)t->lwan->thread.max_fd, 1024);
 
     lwan_status_debug("Starting IO loop on thread #%d", t->id + 1);
+
+    nim_setup_foreign_thread_gc();
 
     events = calloc((size_t)max_events, sizeof(*events));
     if (UNLIKELY(!events))
