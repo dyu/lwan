@@ -29,7 +29,7 @@
 
 #include "lwan.h"
 
-extern void nim_setup_foreign_thread_gc(void);
+extern bool nim_setup_foreign_thread_gc(short worker_id);
 
 struct death_queue_t {
     lwan_connection_t *conns;
@@ -289,7 +289,10 @@ thread_io_loop(void *data)
 
     lwan_status_debug("Starting IO loop on thread #%d", t->id + 1);
 
-    nim_setup_foreign_thread_gc();
+    if (!nim_setup_foreign_thread_gc(t->id)) {
+        lwan_status_critical("Could not setup nim thread.");
+        return NULL;
+    }
 
     events = calloc((size_t)max_events, sizeof(*events));
     if (UNLIKELY(!events))
