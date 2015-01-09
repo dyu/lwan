@@ -573,8 +573,9 @@ read_post_data(lwan_request_t *request, lwan_request_parse_t *helper, char
 
     if (!helper->content_length.value)
         return HTTP_BAD_REQUEST;
-    parsed_length = parse_long(helper->content_length.value, DEFAULT_BUFFER_SIZE);
-    if (UNLIKELY(parsed_length > DEFAULT_BUFFER_SIZE))
+    // - 1 is for the null terminator
+    parsed_length = parse_long(helper->content_length.value, DEFAULT_BUFFER_SIZE - 1);
+    if (UNLIKELY(parsed_length > DEFAULT_BUFFER_SIZE - 1))
         return HTTP_TOO_LARGE;
     if (UNLIKELY(parsed_length < 0))
         return HTTP_BAD_REQUEST;
@@ -585,6 +586,10 @@ read_post_data(lwan_request_t *request, lwan_request_parse_t *helper, char
     if (curr_post_data_len == post_data_size) {
         helper->post_data.value = buffer;
         helper->post_data.len = (size_t)post_data_size;
+        // null-terminated for flatbuffer's json parser
+        *(helper->post_data.value + post_data_size) = '\0';
+        // set as request body
+        request->body = helper->post_data;
 
         return HTTP_OK;
     }
@@ -605,6 +610,10 @@ read_post_data(lwan_request_t *request, lwan_request_parse_t *helper, char
         return status;
 
     helper->post_data.value -= curr_post_data_len;
+    // null-terminated for flatbuffer's json parser
+    *(helper->post_data.value + post_data_size) = '\0';
+    // set as request body
+    request->body = helper->post_data;
     return HTTP_OK;
 }
 

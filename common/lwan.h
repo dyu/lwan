@@ -180,6 +180,7 @@ struct lwan_request_t_ {
     int fd;
     lwan_value_t url;
     lwan_value_t original_url;
+    lwan_value_t body;
     lwan_connection_t *conn;
 
     struct {
