@@ -553,7 +553,7 @@ static ALWAYS_INLINE lwan_http_status_t
 read_request(lwan_request_t *request, lwan_request_parse_t *helper)
 {
     return read_from_request_socket(request, &helper->buffer,
-                        DEFAULT_BUFFER_SIZE, read_request_finalizer);
+                        DEFAULT_BUFFER_SIZE - 1, read_request_finalizer);
 }
 
 static lwan_read_finalizer_t
