@@ -133,7 +133,8 @@ typedef enum {
     CONN_KEEP_ALIVE         = 1<<0,
     CONN_IS_ALIVE           = 1<<1,
     CONN_SHOULD_RESUME_CORO = 1<<2,
-    CONN_WRITE_EVENTS       = 1<<3
+    CONN_WRITE_EVENTS       = 1<<3,
+    CONN_PENDING_CALLBACK   = 1<<4
 } lwan_connection_flags_t;
 
 typedef enum {

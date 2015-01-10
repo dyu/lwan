@@ -162,7 +162,7 @@ resume_coro_if_needed(struct death_queue_t *dq, lwan_connection_t *conn,
 {
     assert(conn->coro);
 
-    if (!(conn->flags & CONN_SHOULD_RESUME_CORO))
+    if (conn->flags & CONN_PENDING_CALLBACK || !(conn->flags & CONN_SHOULD_RESUME_CORO))
         return;
 
     lwan_connection_coro_yield_t yield_result = coro_resume(conn->coro);
