@@ -34,7 +34,7 @@
 
 #include "lwan-config.h"
 #include "lwan-http-authorize.h"
-#include "lwan-lua.h"
+//#include "lwan-lua.h"
 #include "lwan-redirect.h"
 #include "lwan-serve-files.h"
 
@@ -441,7 +441,7 @@ lwan_init_wc(lwan_t *l, short worker_count)
     lwan_module_init(l);
     lwan_module_register(l, lwan_module_serve_files());
     lwan_module_register(l, lwan_module_redirect());
-    lwan_module_register(l, lwan_module_lua());
+    //lwan_module_register(l, lwan_module_lua());
 
     /* Load the configuration file. */
     if (!setup_from_config(l))
