@@ -414,14 +414,8 @@ get_number_of_cpus(void)
     return (short)n_online_cpus;
 }
 
-void
-lwan_init(lwan_t *l)
-{
-    lwan_init_wc(l, get_number_of_cpus());
-}
-
-void
-lwan_init_wc(lwan_t *l, short worker_count)
+static void
+lwan_init_main(lwan_t *l, short worker_count, bool foreign_threads)
 {
     /* Load defaults */
     memset(l, 0, sizeof(*l));
@@ -464,9 +458,30 @@ lwan_init_wc(lwan_t *l, short worker_count)
     signal(SIGPIPE, SIG_IGN);
     close(STDIN_FILENO);
 
-    lwan_thread_init(l);
+    if (foreign_threads)
+        lwan_thread_init_ft(l);
+    else
+        lwan_thread_init(l);
     lwan_socket_init(l);
     lwan_http_authorize_init();
+}
+
+void
+lwan_init(lwan_t *l)
+{
+    lwan_init_main(l, get_number_of_cpus(), false);
+}
+
+void
+lwan_init_wc(lwan_t *l, short worker_count)
+{
+    lwan_init_main(l, worker_count, false);
+}
+
+void
+lwan_init_ft(lwan_t *l, short worker_count)
+{
+    lwan_init_main(l, worker_count, true);
 }
 
 void

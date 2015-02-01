@@ -29,6 +29,7 @@ void lwan_socket_init(lwan_t *l);
 void lwan_socket_shutdown(lwan_t *l);
 
 void lwan_thread_init(lwan_t *l);
+void lwan_thread_init_ft(lwan_t *l);
 void lwan_thread_shutdown(lwan_t *l);
 void lwan_thread_add_client(lwan_thread_t *t, int fd);
 

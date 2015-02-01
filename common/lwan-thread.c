@@ -383,6 +383,21 @@ create_thread(lwan_t *l, short thread_n)
 }
 
 void
+lwan_thread_loop_ft(lwan_t *l, short thread_n)
+{
+    lwan_thread_t *thread = &l->thread.threads[thread_n];
+
+    if (pipe2(thread->pipe_fd, O_NONBLOCK) < 0)
+        lwan_status_critical_perror("pipe");
+
+    struct epoll_event event = { .events = EPOLLIN, .data.ptr = NULL };
+    if (epoll_ctl(thread->epoll_fd, EPOLL_CTL_ADD, thread->pipe_fd[0], &event) < 0)
+        lwan_status_critical_perror("epoll_ctl");
+    
+    thread_io_loop(thread);
+}
+
+void
 lwan_thread_add_client(lwan_thread_t *t, int fd)
 {
     t->lwan->conns[fd].flags = 0;
@@ -403,6 +418,28 @@ lwan_thread_init(lwan_t *l)
 
     for (short i = 0; i < l->thread.count; i++)
         create_thread(l, i);
+}
+
+void
+lwan_thread_init_ft(lwan_t *l)
+{
+    lwan_status_debug("Initializing threads");
+
+    l->thread.threads = calloc((size_t)l->thread.count, sizeof(lwan_thread_t));
+    if (!l->thread.threads)
+        lwan_status_critical("Could not allocate memory for threads");
+
+    for (short thread_n = 0; thread_n < l->thread.count; thread_n++)
+    {
+        lwan_thread_t *thread = &l->thread.threads[thread_n];
+
+        memset(thread, 0, sizeof(*thread));
+        thread->lwan = l;
+        thread->id = thread_n;
+        
+        if ((thread->epoll_fd = epoll_create1(0)) < 0)
+            lwan_status_critical_perror("epoll_create");
+    }
 }
 
 void
