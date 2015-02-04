@@ -383,9 +383,10 @@ create_thread(lwan_t *l, short thread_n)
 }
 
 void
-lwan_thread_loop_ft(lwan_t *l, short thread_n)
+lwan_thread_loop_ft(lwan_t *l, short thread_n, void* env)
 {
     lwan_thread_t *thread = &l->thread.threads[thread_n];
+    thread->env = env;
 
     if (pipe2(thread->pipe_fd, O_NONBLOCK) < 0)
         lwan_status_critical_perror("pipe");

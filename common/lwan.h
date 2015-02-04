@@ -232,6 +232,7 @@ struct lwan_thread_t_ {
         time_t last;
     } date;
     short id;
+    void* env;
 
     pthread_t self;
     int epoll_fd;
@@ -299,7 +300,7 @@ short get_number_of_cpus(void);
 void lwan_init(lwan_t *l);
 void lwan_init_wc(lwan_t *l, short worker_count);
 void lwan_init_ft(lwan_t *l, short worker_count);
-void lwan_thread_loop_ft(lwan_t *l, short worker_n);
+void lwan_thread_loop_ft(lwan_t *l, short worker_n, void* env);
 void lwan_shutdown(lwan_t *l);
 
 int lwan_connection_get_fd(lwan_connection_t *conn)
