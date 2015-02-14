@@ -54,7 +54,7 @@ unsigned int parse_time_period(const char *str, unsigned int default_value)
                         multiplier);
         }
 
-        str = (const char *)rawmemchr(str, multiplier) + 1;
+        str = (const char *)strchr(str, multiplier) + 1;
     }
 
     return total ? total : default_value;
@@ -122,7 +122,7 @@ static char *remove_comments(char *line)
 
 static char *remove_trailing_spaces(char *line)
 {
-    char *end = rawmemchr(line, '\0');
+    char *end = line + strlen(line);
 
     for (end--; isspace(*end); end--);
     *(end + 1) = '\0';
@@ -141,7 +141,7 @@ static char *find_line_end(char *line)
 {
     if (*line == '\0')
         return line;
-    return (char *)rawmemchr(line, '\0') - 1;
+    return line + strlen(line) - 1;
 }
 
 static bool parse_section(char *line, config_line_t *l)
