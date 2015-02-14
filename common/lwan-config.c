@@ -226,7 +226,7 @@ bool config_open(config_t *conf, const char *path)
         return false;
     if (!path)
         return false;
-    conf->file = fopen(path, "r");
+    conf->file = fopen(path, "re");
     if (!conf->file)
         return false;
     conf->line = 0;
@@ -240,11 +240,6 @@ void config_close(config_t *conf)
         return;
     if (!conf->file)
         return;
-    while (fclose(conf->file) == EOF) {
-        if (errno != EINTR) {
-            lwan_status_perror("Could not close config file");
-            break;
-        }
-    }
+    fclose(conf->file);
     free(conf->error_message);
 }

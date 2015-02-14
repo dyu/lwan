@@ -69,25 +69,52 @@ some event library such as [libev](http://libev.schmorp.de) or
 Building
 --------
 
-Lwan uses CMake for its build system. To build it, create a build
-directory, issue `cmake $LWAN_SOURCE_TREE`, and then `make`, as usual. CMake should be at least version 2.8.
+Before installing Lwan, ensure all dependencies are installed. All of them are common dependencies found in any GNU/Linux distribution; package names will be different, but it shouldn't be difficult to search using whatever package management tool that's used by your distribution.
 
-The CMake script should look for libraries like [TCMalloc](https://code.google.com/p/gperftools/), [jemalloc](http://www.canonware.com/jemalloc), and [Valgrind](http://valgrind.org), and enable/link as appropriate.
+### Required dependencies
 
-Other libraries, such as [ZLib](http://zlib.net/), [SQLite 3](https://sqlite.org/), [Lua 5.1](http://www.lua.org/) or [LuaJIT 2.0](http://luajit.org/), and client libraries for either [MySQL](https://dev.mysql.com/) or [MariaDB](https://mariadb.org/) are required to build Lwan. In the future, some of these might be converted to optional dependencies as the core does not depend on them.
+ - [CMake](http://cmake.org), at least version 2.8
+ - [Python](http://python.org), at least version 2.6 (3.x is OK)
+ - [ZLib](http://zlib.net)
+ - [SQLite 3](http://sqlite.org)
+ - [Lua 5.1](http://www.lua.org) or [LuaJIT 2.0](http://luajit.org)
+ - Client libraries for either [MySQL](https://dev.mysql.com) or [MariaDB](https://mariadb.org)
 
-Python is also a build time dependency: it is required to parse and compress the MIME Type table. The script is compatible with at least Python 2.6 and should work fine with Python 3.x.
+### Optional dependencies
+
+The build system will look for these libraries and enable/link if available.
+
+ - [TCMalloc](https://code.google.com/p/gperftools/)
+ - [jemalloc](http://www.canonware.com/jemalloc)
+ - [Valgrind](http://valgrind.org)
+
+### Common distribution package names
+
+ - ArchLinux: `pacman -S cmake python zlib sqlite luajit libmariadbclient gperftools valgrind`
+
+### Build commands
+
+    ~$ git clone git://github.com/lpereira/lwan
+    ~$ cd lwan
+    ~/lwan$ mkdir build
+    ~/lwan$ cd build
+    ~/lwan/build$ cmake .. -DCMAKE_BUILD_TYPE=Release
+
+It is important to build outside of the tree; in-tree builds *are not supported*.
 
 Passing `-DCMAKE_BUILD_TYPE=Release` will enable some compiler
 optimizations, like [LTO](http://gcc.gnu.org/wiki/LinkTimeOptimization)
-and tune the code for current architecture. Please use this version
-when benchmarking, as the default is the Debug build, which not only
+and tune the code for current architecture. *Please use this version
+when benchmarking*, as the default is the Debug build, which not only
 logs all requests to the standard output, but does so while holding a
 mutex.
 
-Passing `-DCMAKE_BUILD_TYPE=Debug` will generate code suitable to be used
-under a debugger like [gdb](http://www.gnu.org/software/gdb/) and force
-debug messages to be printed to the terminal.
+The default build (i.e. not passing `-DCMAKE_BUILD_TYPE=Release`) will build
+a version suitable for debugging purposes. This version can be used under
+Valgrind, is built with Undefined Behavior Sanitizer, and includes debugging
+messages that are stripped in the release version. Debugging messages are
+printed while holding a mutex, and are printed for each and every request;
+so do not use this version for benchmarking purposes.
 
 Running
 -------
@@ -100,7 +127,11 @@ are made to this file, running lwan will serve static files located in
 the `./wwwroot` directory, and also provide a `Hello, World!` handler (which
 serves as an example of how to use some of its internal APIs).
 
-Lwan will listenon port 8080 on all interfaces.
+Lwan will listen on port 8080 on all interfaces.
+
+Lwan will detect the number of CPUs, will increase the maximum number of
+open file descriptors and generally try its best to autodetect reasonable
+settings for the environment it's running on.
 
 Build status
 ------------
@@ -109,5 +140,4 @@ Build status
 |---------|-------|-----------------|------------|
 | ![release](http://buildbot.lwan.ws/buildstatusimage?builder=release&number=-1 "Release") | ![debug](http://buildbot.lwan.ws/buildstatusimage?builder=debug&number=-1 "Debug") | ![clang](http://buildbot.lwan.ws/buildstatusimage?builder=clang-analyze&number=-1 "Clang") ![coverity](https://scan.coverity.com/projects/375/badge.svg)| ![tests](http://buildbot.lwan.ws/buildstatusimage?builder=unit-tests&number=-1 "Tests")
 | [Waterfall](http://buildbot.lwan.ws/waterfall?show=release) | [Waterfall](http://buildbot.lwan.ws/waterfall?show=debug) | [Waterfall](http://buildbot.lwan.ws/waterfall?show=clang-analyze) - [Reports](http://buildbot.lwan.ws/sa/) | [Waterfall](http://buildbot.lwan.ws/waterfall?show=unit-tests) |
-
 

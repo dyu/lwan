@@ -43,7 +43,8 @@ static const lwan_config_t default_config = {
     .keep_alive_timeout = 15,
     .quiet = false,
     .reuse_port = false,
-    .expires = 1 * ONE_WEEK
+    .expires = 1 * ONE_WEEK,
+    .n_threads = 0
 };
 
 static void lwan_module_init(lwan_t *l)
@@ -307,7 +308,8 @@ const char *get_config_path(char *path_buf)
     path = strrchr(path_buf, '/');
     if (!path)
         goto out;
-    if (snprintf(path_buf, PATH_MAX, "%s.conf", path + 1) < 0)
+    int ret = snprintf(path_buf, PATH_MAX, "%s.conf", path + 1);
+    if (ret < 0 || ret >= PATH_MAX)
         goto out;
 
     return path_buf;
@@ -347,6 +349,12 @@ static bool setup_from_config(lwan_t *lwan)
             else if (!strcmp(line.line.key, "expires"))
                 lwan->config.expires = parse_time_period(line.line.value,
                             default_config.expires);
+            else if (!strcmp(line.line.key, "threads")) {
+                long n_threads = parse_long(line.line.value, default_config.n_threads);
+                if (n_threads < 0)
+                    config_error(&conf, "Invalid number of threads: %d", n_threads);
+                lwan->config.n_threads = (unsigned short int)n_threads;
+            }
             else
                 config_error(&conf, "Unknown config key: %s", line.line.key);
             break;
@@ -403,15 +411,15 @@ allocate_connections(lwan_t *l, size_t max_open_files)
         lwan_status_critical_perror("calloc");
 }
 
-short
+unsigned short int
 get_number_of_cpus(void)
 {
     long n_online_cpus = sysconf(_SC_NPROCESSORS_ONLN);
     if (UNLIKELY(n_online_cpus < 0)) {
-        lwan_status_warning("Could not get number of online CPUs, assuming 1 CPU.");
+        lwan_status_warning("Could not get number of online CPUs, assuming 1 CPU");
         return 1;
     }
-    return (short)n_online_cpus;
+    return (unsigned short int)n_online_cpus;
 }
 
 void
@@ -421,7 +429,7 @@ lwan_init(lwan_t *l)
 }
 
 void
-lwan_init_wc(lwan_t *l, short worker_count)
+lwan_init_wc(lwan_t *l, unsigned short int worker_count)
 {
     /* Load defaults */
     memset(l, 0, sizeof(*l));
@@ -450,9 +458,11 @@ lwan_init_wc(lwan_t *l, short worker_count)
     /* Continue initialization as normal. */
     lwan_status_debug("Initializing lwan web server");
 
-    l->thread.count = worker_count;
-    if (l->thread.count == 1)
-        l->thread.count = 2;
+    if (!l->config.n_threads) {
+        l->thread.count = worker_count == 0 ? 2 : worker_count;
+    } else {
+        l->thread.count = l->config.n_threads;
+    }
 
     rlim_t max_open_files = setup_open_file_count_limits();
     allocate_connections(l, (size_t)max_open_files);
@@ -536,7 +546,7 @@ lwan_main_loop(lwan_t *l)
     lwan_status_info("Ready to serve");
 
     for (;;) {
-        int client_fd = accept4(l->main_socket, NULL, NULL, SOCK_NONBLOCK);
+        int client_fd = accept4(l->main_socket, NULL, NULL, SOCK_NONBLOCK | SOCK_CLOEXEC);
         if (UNLIKELY(client_fd < 0)) {
             if (errno != EBADF) {
                 lwan_status_perror("accept");

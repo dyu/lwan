@@ -41,6 +41,10 @@
         headers[number_].value = (value_); \
     } while(0)
 
+static const char *compression_none = NULL;
+static const char *compression_gzip = "gzip";
+static const char *compression_deflate = "deflate";
+
 typedef struct serve_files_priv_t_	serve_files_priv_t;
 typedef struct file_cache_entry_t_	file_cache_entry_t;
 typedef struct cache_funcs_t_		cache_funcs_t;
@@ -89,8 +93,10 @@ struct sendfile_cache_data_t_ {
      *       but might be a good alternative for popular files.
      */
 
-    char *filename;
-    size_t size;
+    struct {
+        char *filename;
+        size_t size;
+    } compressed, uncompressed;
 };
 
 struct dir_list_cache_data_t_ {
@@ -294,11 +300,17 @@ out:
     return 0;
 }
 
+static ALWAYS_INLINE bool
+is_compression_worthy(const size_t compressed_sz, const size_t uncompressed_sz)
+{
+    /* FIXME: gzip encoding is also supported but not considered here */
+    static const size_t deflated_header_size = sizeof("Content-Encoding: deflate\r\n") - 1;
+    return ((compressed_sz + deflated_header_size) < uncompressed_sz);
+}
+
 static void
 compress_cached_entry(mmap_cache_data_t *md)
 {
-    static const size_t deflated_header_size = sizeof("Content-Encoding: deflate");
-
     md->compressed.size = compressBound(md->uncompressed.size);
 
     if (UNLIKELY(!(md->compressed.contents = malloc(md->compressed.size))))
@@ -308,7 +320,7 @@ compress_cached_entry(mmap_cache_data_t *md)
                           md->uncompressed.contents, md->uncompressed.size) != Z_OK))
         goto error_free_compressed;
 
-    if ((md->compressed.size + deflated_header_size) < md->uncompressed.size)
+    if (is_compression_worthy(md->compressed.size, md->uncompressed.size))
         return;
 
 error_free_compressed:
@@ -365,14 +377,37 @@ sendfile_init(file_cache_entry_t *ce,
                struct stat *st)
 {
     sendfile_cache_data_t *sd = (sendfile_cache_data_t *)(ce + 1);
-
-    sd->size = (size_t)st->st_size;
-    sd->filename = strdup(full_path + priv->root.path_len + 1);
+    struct stat compressed_st;
 
     ce->mime_type = lwan_determine_mime_type_for_file_name(
                 full_path + priv->root.path_len);
 
-    return !!sd->filename;
+    /* Try to serve a compressed file using sendfile() if $FILENAME.gz exists */
+    int len = asprintf(&sd->compressed.filename, "%s.gz", full_path + priv->root.path_len + 1);
+    if (UNLIKELY(len < 0 || len >= PATH_MAX))
+        goto only_uncompressed;
+
+    int ret = fstatat(priv->root.fd, sd->compressed.filename, &compressed_st, 0);
+    if (LIKELY(ret >= 0 && compressed_st.st_mtime >= st->st_mtime &&
+            is_compression_worthy((size_t)compressed_st.st_size, (size_t)st->st_size))) {
+        sd->compressed.size = (size_t)compressed_st.st_size;
+    } else {
+        free(sd->compressed.filename);
+
+only_uncompressed:
+        sd->compressed.filename = NULL;
+        sd->compressed.size = 0;
+    }
+
+    /* Regardless of the existence of $FILENAME.gz, store the full path */
+    sd->uncompressed.size = (size_t)st->st_size;
+    sd->uncompressed.filename = strdup(full_path + priv->root.path_len + 1);
+    if (UNLIKELY(!sd->uncompressed.filename)) {
+        free(sd->compressed.filename);
+        return false;
+    }
+
+    return true;
 }
 
 static bool
@@ -429,8 +464,8 @@ get_funcs(serve_files_priv_t *priv, const char *key, char *full_path,
             if (*(key_end - 1) != '/')
                 return &redir_funcs;
 
-            if (UNLIKELY(snprintf(index_html_path, PATH_MAX, "%s%s",
-                        key, priv->index_html) < 0))
+            int ret = snprintf(index_html_path, PATH_MAX, "%s%s", key, priv->index_html);
+            if (UNLIKELY(ret < 0 || ret >= PATH_MAX))
                 return NULL;
         }
 
@@ -530,7 +565,8 @@ sendfile_free(void *data)
 {
     sendfile_cache_data_t *sd = data;
 
-    free(sd->filename);
+    free(sd->compressed.filename);
+    free(sd->uncompressed.filename);
 }
 
 static void
@@ -563,7 +599,7 @@ try_open_directory(const char *path, int *open_mode)
 {
     int fd;
 
-    *open_mode = O_RDONLY | O_NOATIME | O_NONBLOCK;
+    *open_mode = O_RDONLY | O_NOATIME | O_NONBLOCK | O_CLOEXEC;
 
     fd = open(path, *open_mode | O_DIRECTORY);
     if (fd < 0) {
@@ -688,7 +724,7 @@ prepare_headers(lwan_request_t *request,
                  lwan_http_status_t return_status,
                  file_cache_entry_t *fce,
                  size_t size,
-                 bool deflated,
+                 const char *compression_type,
                  char *header_buf,
                  size_t header_buf_size)
 {
@@ -699,8 +735,8 @@ prepare_headers(lwan_request_t *request,
 
     SET_NTH_HEADER(0, "Last-Modified", fce->last_modified.string);
 
-    if (deflated) {
-        SET_NTH_HEADER(1, "Content-Encoding", "deflate");
+    if (compression_type) {
+        SET_NTH_HEADER(1, "Content-Encoding", (char *)compression_type);
         SET_NTH_HEADER(2, NULL, NULL);
     } else {
         SET_NTH_HEADER(1, NULL, NULL);
@@ -769,17 +805,34 @@ sendfile_serve(lwan_request_t *request, void *data)
     size_t header_len;
     lwan_http_status_t return_status;
     off_t from, to;
+    const char *compressed;
+    char *filename;
+    size_t size;
 
-    return_status = compute_range(request, &from, &to, (off_t)sd->size);
-    if (UNLIKELY(return_status == HTTP_RANGE_UNSATISFIABLE))
-        return HTTP_RANGE_UNSATISFIABLE;
+    if (sd->compressed.size && (request->flags & REQUEST_ACCEPT_GZIP)) {
+        from = 0;
+        to = (off_t)sd->compressed.size;
+
+        compressed = compression_gzip;
+        filename = sd->compressed.filename;
+        size = sd->compressed.size;
+
+        return_status = HTTP_OK;
+    } else {
+        return_status = compute_range(request, &from, &to, (off_t)sd->uncompressed.size);
+        if (UNLIKELY(return_status == HTTP_RANGE_UNSATISFIABLE))
+            return HTTP_RANGE_UNSATISFIABLE;
+
+        compressed = compression_none;
+        filename = sd->uncompressed.filename;
+        size = sd->uncompressed.size;
+    }
 
     if (client_has_fresh_content(request, fce->last_modified.integer))
         return_status = HTTP_NOT_MODIFIED;
 
-    header_len = prepare_headers(request, return_status,
-                                  fce, sd->size, false,
-                                  headers, DEFAULT_HEADERS_SIZE);
+    header_len = prepare_headers(request, return_status, fce, size,
+                compressed, headers, DEFAULT_HEADERS_SIZE);
     if (UNLIKELY(!header_len))
         return HTTP_INTERNAL_ERROR;
 
@@ -794,8 +847,7 @@ sendfile_serve(lwan_request_t *request, void *data)
          * The file will be automatically closed whenever this
          * coroutine is freed.
          */
-        int file_fd = lwan_openat(request, priv->root.fd, sd->filename,
-                                  priv->open_mode);
+        int file_fd = lwan_openat(request, priv->root.fd, filename, priv->open_mode);
         if (UNLIKELY(file_fd < 0)) {
             switch (file_fd) {
             case -EACCES:
@@ -816,7 +868,7 @@ sendfile_serve(lwan_request_t *request, void *data)
 
 static lwan_http_status_t
 serve_contents_and_size(lwan_request_t *request, file_cache_entry_t *fce,
-            bool deflated, void *contents, size_t size)
+            const char *compression_type, void *contents, size_t size)
 {
     char headers[DEFAULT_BUFFER_SIZE];
     size_t header_len;
@@ -826,7 +878,7 @@ serve_contents_and_size(lwan_request_t *request, file_cache_entry_t *fce,
         return_status = HTTP_NOT_MODIFIED;
 
     header_len = prepare_headers(request, return_status,
-                                  fce, size, deflated,
+                                  fce, size, compression_type,
                                   headers, DEFAULT_HEADERS_SIZE);
     if (UNLIKELY(!header_len))
         return HTTP_INTERNAL_ERROR;
@@ -852,16 +904,16 @@ mmap_serve(lwan_request_t *request, void *data)
     mmap_cache_data_t *md = (mmap_cache_data_t *)(fce + 1);
     void *contents;
     size_t size;
-    bool compressed;
+    const char *compressed;
 
     if (md->compressed.size && (request->flags & REQUEST_ACCEPT_DEFLATE)) {
         contents = md->compressed.contents;
         size = md->compressed.size;
-        compressed = true;
+        compressed = compression_deflate;
     } else {
         contents = md->uncompressed.contents;
         size = md->uncompressed.size;
-        compressed = false;
+        compressed = compression_none;
     }
 
     return serve_contents_and_size(request, fce, compressed, contents, size);
@@ -873,7 +925,7 @@ dirlist_serve(lwan_request_t *request, void *data)
     file_cache_entry_t *fce = data;
     dir_list_cache_data_t *dd = (dir_list_cache_data_t *)(fce + 1);
 
-    return serve_contents_and_size(request, fce, false,
+    return serve_contents_and_size(request, fce, compression_none,
             strbuf_get_buffer(dd->rendered), strbuf_get_length(dd->rendered));
 }
 

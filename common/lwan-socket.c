@@ -44,7 +44,7 @@ get_backlog_size(void)
 #endif
     FILE *somaxconn;
 
-    somaxconn = fopen("/proc/sys/net/core/somaxconn", "r");
+    somaxconn = fopen("/proc/sys/net/core/somaxconn", "re");
     if (somaxconn) {
         int tmp;
         if (fscanf(somaxconn, "%d", &tmp) == 1)
@@ -63,6 +63,12 @@ setup_socket_from_systemd(void)
     if (!sd_is_socket_inet(fd, AF_UNSPEC, SOCK_STREAM, 1, 0))
         lwan_status_critical("Passed file descriptor is not a "
             "listening TCP socket");
+
+    int flags = fcntl(fd, F_GETFD);
+    if (flags < 0)
+        lwan_status_critical_perror("Could not obtain socket flags");
+    if (fcntl(fd, F_SETFD, flags | FD_CLOEXEC) < 0)
+        lwan_status_critical_perror("Could not set socket flags");
 
     return fd;
 }
@@ -172,7 +178,8 @@ bind_and_listen_addrinfos(struct addrinfo *addrs, bool reuse_port)
 
     /* Try each address until we bind one successfully. */
     for (addr = addrs; addr; addr = addr->ai_next) {
-        int fd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
+        int fd = socket(addr->ai_family,
+            addr->ai_socktype | SOCK_CLOEXEC, addr->ai_protocol);
         if (fd < 0)
             continue;
 

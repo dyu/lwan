@@ -119,13 +119,14 @@ typedef enum {
 
 typedef enum {
     REQUEST_ACCEPT_DEFLATE     = 1<<0,
-    REQUEST_IS_HTTP_1_0        = 1<<1,
-    REQUEST_METHOD_GET         = 1<<2,
-    REQUEST_METHOD_HEAD        = 1<<3,
-    REQUEST_METHOD_POST        = 1<<4,
-    RESPONSE_SENT_HEADERS      = 1<<5,
-    RESPONSE_CHUNKED_ENCODING  = 1<<6,
-    RESPONSE_NO_CONTENT_LENGTH = 1<<7
+    REQUEST_ACCEPT_GZIP        = 1<<1,
+    REQUEST_IS_HTTP_1_0        = 1<<2,
+    REQUEST_METHOD_GET         = 1<<3,
+    REQUEST_METHOD_HEAD        = 1<<4,
+    REQUEST_METHOD_POST        = 1<<5,
+    RESPONSE_SENT_HEADERS      = 1<<6,
+    RESPONSE_CHUNKED_ENCODING  = 1<<7,
+    RESPONSE_NO_CONTENT_LENGTH = 1<<8
 } lwan_request_flags_t;
 
 typedef enum {
@@ -244,6 +245,7 @@ struct lwan_config_t_ {
     bool quiet;
     bool reuse_port;
     unsigned int expires;
+    short unsigned int n_threads;
 };
 
 struct lwan_t_ {
@@ -254,7 +256,7 @@ struct lwan_t_ {
     lwan_config_t config;
 
     struct {
-        short count;
+        unsigned short int count;
         unsigned max_fd;
         lwan_thread_t *threads;
     } thread;
@@ -295,9 +297,9 @@ const char *lwan_http_status_as_descriptive_string(lwan_http_status_t status)
 const char *lwan_determine_mime_type_for_file_name(const char *file_name)
     __attribute__((pure)) __attribute__((warn_unused_result));
 
-short get_number_of_cpus(void);
+unsigned short int get_number_of_cpus(void);
 void lwan_init(lwan_t *l);
-void lwan_init_wc(lwan_t *l, short worker_count);
+void lwan_init_wc(lwan_t *l, unsigned short int worker_count);
 void lwan_shutdown(lwan_t *l);
 
 int lwan_connection_get_fd(lwan_connection_t *conn)
