@@ -459,7 +459,7 @@ lwan_init_wc(lwan_t *l, unsigned short int worker_count)
     lwan_status_debug("Initializing lwan web server");
 
     if (!l->config.n_threads) {
-        l->thread.count = worker_count == 0 ? 2 : worker_count;
+        l->thread.count = worker_count == 0 ? (unsigned short int)2 : worker_count;
     } else {
         l->thread.count = l->config.n_threads;
     }
