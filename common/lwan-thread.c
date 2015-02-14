@@ -419,7 +419,8 @@ lwan_thread_shutdown(lwan_t *l)
         close(t->pipe_fd[0]);
         close(t->pipe_fd[1]);
 
-        pthread_join(l->thread.threads[i].self, NULL);
+        //lwan_status_info("Shutting down thread %i\n", i);
+        //pthread_join(l->thread.threads[i].self, NULL);
     }
 
     free(l->thread.threads);
