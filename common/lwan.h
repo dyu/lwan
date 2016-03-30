@@ -301,7 +301,7 @@ const char *lwan_determine_mime_type_for_file_name(const char *file_name)
 
 unsigned short int get_number_of_cpus(void);
 void lwan_init(lwan_t *l);
-void lwan_init_wc(lwan_t *l, unsigned short int worker_count);
+void lwan_init_wc(lwan_t *l, const lwan_config_t *config);
 void lwan_shutdown(lwan_t *l);
 
 int lwan_connection_get_fd(lwan_connection_t *conn)

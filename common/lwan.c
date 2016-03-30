@@ -425,15 +425,24 @@ get_number_of_cpus(void)
 void
 lwan_init(lwan_t *l)
 {
-    lwan_init_wc(l, get_number_of_cpus());
+    lwan_init_wc(l, NULL);
 }
 
 void
-lwan_init_wc(lwan_t *l, unsigned short int worker_count)
+lwan_init_wc(lwan_t *l, const lwan_config_t *config)
 {
     /* Load defaults */
     memset(l, 0, sizeof(*l));
     memcpy(&l->config, &default_config, sizeof(default_config));
+    
+    if (config != NULL)
+    {
+        if (config->listener)
+            l->config.listener = config->listener;
+        
+        if (config->n_threads)
+            l->config.n_threads = config->n_threads;
+    }
 
     /* Initialize status first, as it is used by other things during
      * their initialization. */
@@ -452,14 +461,14 @@ lwan_init_wc(lwan_t *l, unsigned short int worker_count)
     //lwan_module_register(l, lwan_module_lua());
 
     /* Load the configuration file. */
-    if (!setup_from_config(l))
+    if (!setup_from_config(l) && config == NULL)
         lwan_status_warning("Could not read config file, using defaults");
 
     /* Continue initialization as normal. */
     lwan_status_debug("Initializing lwan web server");
 
     if (!l->config.n_threads) {
-        l->thread.count = worker_count == 0 ? (unsigned short int)2 : worker_count;
+        l->thread.count = get_number_of_cpus();
     } else {
         l->thread.count = l->config.n_threads;
     }
